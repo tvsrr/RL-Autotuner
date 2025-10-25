@@ -1,0 +1,9 @@
+numpy
+matplotlib
+gymnasium
+highway-env
+stable-baselines3[extra]
+opencv-python
+imageio
+pandas
+tqdm
