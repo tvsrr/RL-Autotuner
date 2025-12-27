@@ -1,0 +1,124 @@
+PROJECT BATTLE PLAN: ADAPTIVE RL-PID TUNER
+
+Title: Real-Time Adaptive PID Tuning via Latent Dynamics Identification
+Goal: Develop a low-compute reinforcement learning agent that adapts PID gains
+      on-the-fly by inferring changing road conditions (friction, grade, mass)
+      from vehicle response history, without requiring expensive sensors or
+      high-compute MPC.
+
+Note: This is a revised, publication-ready project anchor. It addresses the
+      "Why PID?", "No Oracle", and "SAC Overkill" concerns directly.
+
+--------------------------------------------------------------------------
+1) CORE HYPOTHESIS
+
+An RL agent can implicitly learn to identify unobservable dynamic parameters
+(like sudden friction drop or mass change) solely by observing the history of
+control inputs vs. vehicle response. By adjusting PID gains in real-time based
+on this "latent context," the system will achieve lower tracking error and
+higher stability than static Gain Scheduling, while remaining computationally
+cheaper than MPC.
+
+--------------------------------------------------------------------------
+2) PROBLEMS TACKLED
+
+- The "Oracle" Problem:
+  Real cars do not know the exact friction coefficient or vehicle mass.
+  Solution: Replace ground-truth inputs with response history (implicit system ID).
+
+- The "Compute" Problem:
+  MPC and end-to-end neural policies are computationally heavy and hard to
+  certify for safety.
+  Solution: Use a lightweight PID for the fast control loop (100 Hz) and a
+  small RL network for the slow tuning loop (10 Hz).
+
+- The "Static" Problem:
+  Classic Gain Scheduling fails when conditions drift outside the pre-calculated
+  lookup table (e.g., tire wear, icy patches).
+  Solution: Continuous adaptation allows the controller to handle out-of-
+  distribution physics.
+
+--------------------------------------------------------------------------
+3) ARCHITECTURE AND ALGORITHMS
+
+Control Strategy: Dual-Loop Architecture
+
+Inner Loop (100 Hz): Standard PID Controller
+- Input: Cross-track error (CTE) or velocity error.
+- Output: Steering angle / throttle / brake.
+- Safety: Hard-coded saturation limits on output.
+
+Outer Loop (10 Hz): RL Agent (the Tuner)
+- Input: Sliding window of state history (observation vector).
+- Output: Continuous updates to .
+- Algorithm: Soft Actor-Critic (SAC), selected for stability with continuous
+  action spaces and sample efficiency.
+
+Tools Stack
+- Simulation: Webots (physics engine for vehicle dynamics).
+- Interface: Deepbots or custom ZeroMQ bridge (Python <-> Webots).
+- RL Library: Stable-Baselines3 (implementation of SAC).
+- Analysis: Matplotlib (phase plots, error distribution histograms).
+
+--------------------------------------------------------------------------
+4) EXPERIMENTAL SETUP
+
+A) Observation Space (No-Oracle Inputs)
+The agent does not see friction or mass. It sees a history stack (e.g., last
+10 steps):
+1) State Error:  (Is error growing?)
+2) Control Action:  (How hard did I try?)
+3) Vehicle Response:  (Did the car actually accelerate/turn?)
+Logic: High control + low response implies high mass or low friction.
+
+B) Action Space
+- Continuous vector:
+- Scaled to a sensible range (e.g., of nominal gains per step).
+
+C) Training Scenarios (Domain Randomization)
+- Variable friction: Asphalt () and ice () patches.
+- Variable mass: Nominal and fully loaded (+400 kg).
+- Variable grade: Flat and uphill/downhill (forcing integral windup issues).
+
+--------------------------------------------------------------------------
+5) BASELINES FOR COMPARISON
+
+1) Static PID: Tuned once for nominal conditions (asphalt, flat).
+2) Gain Scheduling: Lookup table based on speed only (industry standard).
+3) Proposed Method: RL-adaptive PID.
+
+--------------------------------------------------------------------------
+6) EXPECTED RESULTS AND METRICS
+
+Primary Metrics (Success Criteria)
+- Tracking Performance: RMSE of lateral/longitudinal error.
+  Target: >15% improvement over Gain Scheduling on mixed surfaces.
+- Stability: Maximum overshoot percentage during step responses.
+- Adaptation Speed: Time to settle after a sudden friction change.
+
+Secondary Metrics (Research Defense)
+- Inference Cost: ms per step; show RL-PID << MPC.
+- Smoothness: Jerk cost (derivative of acceleration) for comfort.
+
+--------------------------------------------------------------------------
+7) WORKFLOW CHECKLIST
+
+[ ] Sim setup: Build Webots track with distinct friction zones (visualize by color).
+[ ] Baseline 1: Tune a fixed PID manually and record baseline error.
+[ ] Baseline 2: Implement gain scheduling (if speed > 60, lower Kp).
+[ ] RL env: Wrap Webots in a Gym interface with observation history stack.
+[ ] Training: Train SAC with randomized friction/mass each episode.
+[ ] Eval: Run test episodes (fixed seeds) and plot error vs. time.
+
+--------------------------------------------------------------------------
+8) CURRENT PROGRESS (AS-IS STATUS)
+
+- MetaDrive PID loop is implemented and runs with fixed gains.
+- Lateral and longitudinal PID controllers are in place.
+- Trajectory planner generates a time-parameterized cubic spline between start
+  and goal states.
+- Ego motion estimation uses a simple kinematic update from speed and yaw to
+  compute vx/vy and propagate position.
+- MetaDrive wrapper provides reset/step/feedback for x, y, yaw, and speed.
+- No RL-based tuning or domain randomization is implemented yet.
+- Webots integration and sensor/ground-truth extraction are not started.
